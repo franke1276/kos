@@ -91,8 +91,61 @@ function doStart {
     stage.
 }
 
+
+function optimize {
+    parameter node, scoreFunction, step.
+     local canditates to list().
+    FROM {local index is 0.} UNTIL index >= node:length STEP {set index to index + 1.} DO {
+         local incNode to node:copy().
+        set incNode[index] to incNode[index] + step.
+         local decNode to node:copy().
+        set decNode[index] to decNode[index] - step.
+        canditates:add(incNode).
+        canditates:add(decNode).
+    }
+     local bestCanditate to node.
+     local scoreBest to scoreFunction(bestCanditate).
+     print round(bestCanditate[0]) + ", " + round(bestCanditate[1]) + ", " + scoreBest .    
+    for candidate in canditates {
+        local scoreCanditate to scoreFunction(candidate).
+        print round(candidate[0]) + ", " + round(candidate[1]) + ", " + scoreCanditate .    
+        if (scoreCanditate < scoreBest) {
+            set bestCanditate to candidate.
+            set scoreBest to scoreFunction(bestCanditate).
+        }
+    }
+    print "=" + round(bestCanditate[0]) + ", " + round(bestCanditate[1]).
+    return bestCanditate.
+}
+
+function eccentricityScore {
+    parameter nodeList.
+    local node to node(nodeList[0], 0, 0, nodeList[1]).
+    add node.
+    local score to node:orbit:eccentricity.
+    remove node.
+    return score.
+}
+
 function findNextNode{
-    return nextnode.
+    local startTime to TIME:seconds + ETA:APOAPSIS.
+     local candidate to list(startTime, 500).
+    for step in list(100, 10, 1) {
+        until false {
+            local oldScore to eccentricityScore(candidate).
+            local newCandidate to optimize(candidate, eccentricityScore@, step).
+            local newScore to eccentricityScore(newCandidate).
+            //print "startTime: " + startTime + ", old: " + candidate[0] + ", new: " + newCandidate[0].
+            if oldScore < newScore  {
+                print "found best " + oldScore + " step: " + step.
+                break.
+            }
+            set candidate to newCandidate.
+        }
+    }
+    local node to node(candidate[0], 0, 0, candidate[1]).
+    add node.
+    return node.
 }
 
 function executeNode {
@@ -159,9 +212,8 @@ function executeNode {
 
 function main {
     doStart(100000).
-
-    wait 60.
     set nd to findNextNode().
+    print "best node: " + nd:eta + ", dV: " + round(nd:deltav:mag,1).
     executeNode(nd).
     remove nd.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
