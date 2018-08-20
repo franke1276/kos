@@ -3,8 +3,8 @@ clearscreen.
 print "start".
 
 function doStart {
-    parameter wantedApoapsos.
-    SET g TO KERBIN:MU / KERBIN:RADIUS^2.
+    parameter wantedApoapsos, planet.
+    SET g TO planet:MU / planet:RADIUS^2.
     LOCK accvec TO SHIP:SENSORS:ACC - SHIP:SENSORS:GRAV.
     LOCK gforce TO accvec:MAG / g.
 
@@ -16,12 +16,6 @@ function doStart {
     SET PID:SETPOINT TO 1.8.
     SET thrott TO 1.
     LOCK THROTTLE TO thrott.
-
-    // lock targetPitch to 88.963 - 1.03287 * alt:radar^0.409511.
-    // set targetDirection to 90.
-    // lock steering to heading(targetDirection, targetPitch).
-
-    
 
     WHEN MAXTHRUST = 0 THEN {
         PRINT "Staging".
@@ -182,13 +176,18 @@ function executeNode {
 
 }
 
-function main {
-    doStart(100000).
-   
-    set nd to findNextBestNode(eccentricityScore@).
+function doCircularize {
+    parameter scoreFunction.
+    set nd to findNextBestNode(scoreFunction).
     executeNode(nd).
     remove nd.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+}
+
+function main {
+    doStart(100000, KERBIN).
+   
+    doCircularize(eccentricityScore@).
 }
 
 
