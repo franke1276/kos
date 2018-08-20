@@ -31,8 +31,10 @@ function doStart {
         
     }.
 
-    lock angle to 90.0909 - 0.000609091 alt:radar - 4.54545E-8 alt:radar^2
-    lock steering to HEADING(90, angel).
+    //lock angle to 90.0909 - 0.000609091 * alt:radar - 4.54545E-8 * alt:radar^2.
+    //lock angle to 88.963 - 1.03287 * alt:radar^0.409511.
+    lock angle to (17 * alt:radar^2)/1600000000 - (157 * alt:radar/80000) + 90.
+    lock steering to HEADING(90, angle).
 
     UNTIL SHIP:APOAPSIS > wantedApoapsos {
         SET thrott TO thrott + PID:UPDATE(TIME:SECONDS, gforce).
@@ -42,12 +44,13 @@ function doStart {
     }
     SET thrott TO 0.
     unlock steering.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
     WAIT 2.
     stage.
 }
 
 
-function optimize {
+function improve {
     parameter node, scoreFunction, step.
      local canditates to list().
     FROM {local index is 0.} UNTIL index >= node:length STEP {set index to index + 1.} DO {
@@ -60,45 +63,41 @@ function optimize {
     }
      local bestCanditate to node.
      local scoreBest to scoreFunction(bestCanditate).
-     print round(bestCanditate[0]) + ", " + round(bestCanditate[1]) + ", " + scoreBest .    
     for candidate in canditates {
         local scoreCanditate to scoreFunction(candidate).
-        print round(candidate[0]) + ", " + round(candidate[1]) + ", " + scoreCanditate .    
         if (scoreCanditate < scoreBest) {
             set bestCanditate to candidate.
             set scoreBest to scoreFunction(bestCanditate).
         }
     }
-    print "=" + round(bestCanditate[0]) + ", " + round(bestCanditate[1]).
     return bestCanditate.
 }
 
 function eccentricityScore {
     parameter nodeList.
-    local node to node(nodeList[0], 0, 0, nodeList[1]).
+    local node to node(nodeList[0], nodeList[1], nodeList[2], nodeList[3]).
     add node.
     local score to node:orbit:eccentricity.
     remove node.
     return score.
 }
 
-function findNextNode{
+function findNextBestNode {
+    parameter scoreFunction.
     local startTime to TIME:seconds + ETA:APOAPSIS.
-     local candidate to list(startTime, 500).
+     local candidate to list(startTime, 0,0,0).
     for step in list(100, 10, 1) {
         until false {
-            local oldScore to eccentricityScore(candidate).
-            local newCandidate to optimize(candidate, eccentricityScore@, step).
-            local newScore to eccentricityScore(newCandidate).
-            //print "startTime: " + startTime + ", old: " + candidate[0] + ", new: " + newCandidate[0].
+            local oldScore to scoreFunction(candidate).
+            local newCandidate to improve(candidate, eccentricityScore@, step).
+            local newScore to scoreFunction(newCandidate).
             if oldScore < newScore  {
-                print "found best " + oldScore + " step: " + step.
                 break.
             }
             set candidate to newCandidate.
         }
     }
-    local node to node(candidate[0], 0, 0, candidate[1]).
+    local node to node(candidate[0], candidate[1], candidate[2], candidate[3]).
     add node.
     return node.
 }
@@ -109,7 +108,7 @@ function calculateBurnTime {
     local g0 is 9.80665.
     local isp is 0.
 
-    list engines to myEngines.
+    list engines in myEngines.
     for en in myEngines {
         if en:ignition and not en:flameout {
             set isp to isp + (en:isp * (en:maxthrust / ship:maxthrust)).
@@ -185,18 +184,11 @@ function executeNode {
 
 function main {
     doStart(100000).
-
-    rcs off.
-    until false {
-        wait until rcs.
-        print calculateBurnTime(nextnode).
-        rcs off.
-    }
-    // set nd to findNextNode().
-    // print "best node: " + nd:eta + ", dV: " + round(nd:deltav:mag,1).
-    // executeNode(nd).
-    // remove nd.
-    // SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+   
+    set nd to findNextBestNode(eccentricityScore@).
+    executeNode(nd).
+    remove nd.
+    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
 }
 
 
