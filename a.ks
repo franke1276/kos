@@ -69,7 +69,10 @@ function improve {
 
 function eccentricityScore {
     parameter nodeList.
-    local node to node(nodeList[0], nodeList[1], nodeList[2], nodeList[3]).
+    if nodeList[0] < time:seconds + 15 {
+        return 2^64.
+    }
+    local node to node(nodeList[0], 0, 0, nodeList[1]).
     add node.
     local score to node:orbit:eccentricity.
     remove node.
@@ -78,8 +81,7 @@ function eccentricityScore {
 
 function findNextBestNode {
     parameter scoreFunction.
-    local startTime to TIME:seconds + ETA:APOAPSIS.
-     local candidate to list(startTime, 0,0,0).
+     local candidate to list(TIME:seconds + 15,0).
     for step in list(100, 10, 1) {
         until false {
             local oldScore to scoreFunction(candidate).
@@ -91,7 +93,7 @@ function findNextBestNode {
             set candidate to newCandidate.
         }
     }
-    local node to node(candidate[0], candidate[1], candidate[2], candidate[3]).
+    local node to node(candidate[0], 0, 0, candidate[1]).
     add node.
     return node.
 }
