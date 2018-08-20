@@ -20,8 +20,8 @@ function doStart {
     // lock targetPitch to 88.963 - 1.03287 * alt:radar^0.409511.
     // set targetDirection to 90.
     // lock steering to heading(targetDirection, targetPitch).
-    set MYSTEER to heading(90,90).
-    lock steering to MYSTEER.
+
+    
 
     WHEN MAXTHRUST = 0 THEN {
         PRINT "Staging".
@@ -31,57 +31,12 @@ function doStart {
         
     }.
 
-
+    lock angle to 90.0909 - 0.000609091 alt:radar - 4.54545E-8 alt:radar^2
+    lock steering to HEADING(90, angel).
 
     UNTIL SHIP:APOAPSIS > wantedApoapsos {
         SET thrott TO thrott + PID:UPDATE(TIME:SECONDS, gforce).
         print "alt: " +  ROUND(alt:radar,0) AT (0,17).
-        
-        IF SHIP:VELOCITY:SURFACE:MAG < 100 {
-            //This sets our steering 90 degrees up and yawed to the compass
-            //heading of 90 degrees (east)
-            SET MYSTEER TO HEADING(90,90).
-
-        //Once we pass 100m/s, we want to pitch down ten degrees
-        } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 100 AND SHIP:VELOCITY:SURFACE:MAG < 200 {
-            SET MYSTEER TO HEADING(90,80).
-            PRINT "Pitching to 80 degrees" AT(0,15).
-            PRINT ROUND(SHIP:APOAPSIS,0) AT (0,16).
-
-        //Each successive IF statement checks to see if our velocity
-        //is within a 100m/s block and adjusts our heading down another
-        //ten degrees if so
-        } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 200 AND SHIP:VELOCITY:SURFACE:MAG < 300 {
-            SET MYSTEER TO HEADING(90,75).
-            PRINT "Pitching to 70 degrees" AT(0,15).
-            PRINT ROUND(SHIP:APOAPSIS,0) AT (0,16).
-
-        } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 300 AND SHIP:VELOCITY:SURFACE:MAG < 400 {
-            SET MYSTEER TO HEADING(90,70).
-            PRINT "Pitching to 60 degrees" AT(0,15).
-            PRINT ROUND(SHIP:APOAPSIS,0) AT (0,16).
-
-        } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 400 AND SHIP:VELOCITY:SURFACE:MAG < 500 {
-            SET MYSTEER TO HEADING(90,65).
-            PRINT "Pitching to 45 degrees" AT(0,15).
-            PRINT "APOAPSIS: " + ROUND(SHIP:APOAPSIS,0) AT (0,16).
-
-        } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 700 AND SHIP:VELOCITY:SURFACE:MAG < 850 {
-            SET MYSTEER TO HEADING(90,60).
-            PRINT "Pitching to 45 degrees" AT(0,15).
-            PRINT "APOAPSIS: " + ROUND(SHIP:APOAPSIS,0) AT (0,16).
-
-        } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 850 AND SHIP:VELOCITY:SURFACE:MAG < 950 {
-            SET MYSTEER TO HEADING(90,45).
-            PRINT "Pitching to 45 degrees" AT(0,15).
-            PRINT "APOAPSIS: " + ROUND(SHIP:APOAPSIS,0) AT (0,16).
-
-        } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 1000  {
-            SET MYSTEER TO SHIP:PROGRADE.
-            PRINT "Pitching to SHIP:PROGRADE degrees" AT(0,15).
-            PRINT "APOAPSIS: " + ROUND(SHIP:APOAPSIS,0) AT (0,16).
-
-        }.
 
         WAIT 0.001.
     }
@@ -148,17 +103,35 @@ function findNextNode{
     return node.
 }
 
+function calculateBurnTime {
+    parameter nd.
+    local dV is nd:deltav:mag.
+    local g0 is 9.80665.
+    local isp is 0.
+
+    list engines to myEngines.
+    for en in myEngines {
+        if en:ignition and not en:flameout {
+            set isp to isp + (en:isp * (en:maxthrust / ship:maxthrust)).
+        }
+    }
+    local mf is ship:mass / constant():e^(dV / (isp * g0)).
+    local fuelFlow is ship:maxthrust / (isp * g0).
+    local t is (ship:mass - mf) / fuelFlow.
+    return t.
+}
+
 function executeNode {
     parameter nd.
     print "Node in: " + round(nd:eta) + ", DeltaV: " + round(nd:deltav:mag).
 
-    //calculate ship's max acceleration
-    set max_acc to ship:maxthrust/ship:mass.
-    set burn_duration to nd:deltav:mag/max_acc.
+    
+    
+    local burn_duration to calculateBurnTime(nd).
     print "Crude Estimated burn duration: " + round(burn_duration) + "s".
     wait until nd:eta <= (burn_duration/2 + 60).
 
-    set np to nd:deltav. //points to node, don't care about the roll direction.
+    set np to nd:deltav. 
     lock steering to np.
 
     //now we need to wait until the burn vector and ship's facing are aligned
@@ -212,11 +185,18 @@ function executeNode {
 
 function main {
     doStart(100000).
-    set nd to findNextNode().
-    print "best node: " + nd:eta + ", dV: " + round(nd:deltav:mag,1).
-    executeNode(nd).
-    remove nd.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
+
+    rcs off.
+    until false {
+        wait until rcs.
+        print calculateBurnTime(nextnode).
+        rcs off.
+    }
+    // set nd to findNextNode().
+    // print "best node: " + nd:eta + ", dV: " + round(nd:deltav:mag,1).
+    // executeNode(nd).
+    // remove nd.
+    // SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
 }
 
 
