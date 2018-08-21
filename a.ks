@@ -38,6 +38,7 @@ function doStart {
     }
     SET thrott TO 0.
     unlock steering.
+    unlock THROTTLE.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
     WAIT 2.
     stage.
@@ -69,10 +70,8 @@ function improve {
 
 function eccentricityScore {
     parameter nodeList.
-    if nodeList[0] < time:seconds + 15 {
-        return 2^64.
-    }
-    local node to node(nodeList[0], 0, 0, nodeList[1]).
+    
+    local node to node(time:seconds + eta:APOAPSIS, 0, 0, nodeList[0]).
     add node.
     local score to node:orbit:eccentricity.
     remove node.
@@ -80,8 +79,8 @@ function eccentricityScore {
 }
 
 function findNextBestNode {
-    parameter scoreFunction.
-     local candidate to list(TIME:seconds + 15,0).
+    parameter startNode, scoreFunction.
+    local candidate to startNode.
     for step in list(100, 10, 1) {
         until false {
             local oldScore to scoreFunction(candidate).
@@ -93,9 +92,7 @@ function findNextBestNode {
             set candidate to newCandidate.
         }
     }
-    local node to node(candidate[0], 0, 0, candidate[1]).
-    add node.
-    return node.
+    return candidate.
 }
 
 function calculateBurnTime {
@@ -118,6 +115,7 @@ function calculateBurnTime {
 
 function executeNode {
     parameter nd.
+    add nd.
     print "Node in: " + round(nd:eta) + ", DeltaV: " + round(nd:deltav:mag).
 
     
@@ -127,22 +125,25 @@ function executeNode {
     wait until nd:eta <= (burn_duration/2 + 60).
 
     set np to nd:deltav. 
-    lock steering to np.
+    lock steering to nd:deltav.
 
     //now we need to wait until the burn vector and ship's facing are aligned
     wait until vang(np, ship:facing:vector) < 0.25.
 
-    //the ship is facing the right direction, let's wait for our burn time
-    wait until nd:eta <= (burn_duration/2).
-
+    local startTime to time:seconds + nd:eta - (burn_duration/2) - 2.7.
+    
     set thrott to 0.
+    LOCK THROTTLE TO thrott.
+    
 
-
+    
+    wait until time:seconds >= startTime.
+    set thrott to 1.
+    
     set done to False.
     //initial deltav
     set dv0 to nd:deltav.
-    until done
-    {
+    until done {
         //recalculate current max_acceleration, as it changes while we burn through fuel
         set max_acc to ship:maxthrust/ship:mass.
 
@@ -152,44 +153,40 @@ function executeNode {
 
         //here's the tricky part, we need to cut the throttle as soon as our nd:deltav and initial deltav start facing opposite directions
         //this check is done via checking the dot product of those 2 vectors
-        if vdot(dv0, nd:deltav) < 0
-        {
+        if vdot(dv0, nd:deltav) < 0 {
             print "End burn, remain dv " + round(nd:deltav:mag,1) + "m/s, vdot: " + round(vdot(dv0, nd:deltav),1).
-            lock throttle to 0.
+            set thrott to 0.
             break.
         }
 
         //we have very little left to burn, less then 0.1m/s
-        if nd:deltav:mag < 0.1
-        {
+        if nd:deltav:mag < 0.1 {
             print "Finalizing burn, remain dv " + round(nd:deltav:mag,1) + "m/s, vdot: " + round(vdot(dv0, nd:deltav),1).
             //we burn slowly until our node vector starts to drift significantly from initial vector
             //this usually means we are on point
             wait until vdot(dv0, nd:deltav) < 0.5.
 
-            lock throttle to 0.
+            set thrott to 0.
             print "End burn, remain dv " + round(nd:deltav:mag,1) + "m/s, vdot: " + round(vdot(dv0, nd:deltav),1).
             set done to True.
         }
     }
     unlock steering.
     unlock throttle.
-
-
+    
 }
 
 function doCircularize {
-    parameter scoreFunction.
-    set nd to findNextBestNode(scoreFunction).
+    set node to findNextBestNode(list(0), eccentricityScore@).
+    local nd to node(time:seconds + eta:APOAPSIS, 0, 0, node[0]).
+    //  add nd.
     executeNode(nd).
-    remove nd.
-    SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
 }
 
 function main {
     doStart(100000, KERBIN).
    
-    doCircularize(eccentricityScore@).
+    doCircularize().
 }
 
 
