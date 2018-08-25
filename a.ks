@@ -2,6 +2,17 @@ clearscreen.
 
 print "start".
 
+
+function stageNeeded {
+    list engines in myEngines.
+    for en in myEngines {
+        if en:ignition and en:flameout {
+            return True.
+        }
+    }
+    return False.
+}
+
 function doStart {
     parameter wantedApoapsos, planet, targetDirection.
     SET g TO planet:MU / planet:RADIUS^2.
@@ -18,15 +29,12 @@ function doStart {
     LOCK THROTTLE TO thrott.
 
     STAGE.
-    wait until STAGE:READY.
-    wait 0.5.
-    STAGE.
 
-    WHEN MAXTHRUST = 0 THEN {
+    when stageNeeded() then {
+        stage.
         IF STAGE:NUMBER > 0
             PRESERVE.
-        
-    }.
+    } 
 
     //lock angle to 90.0909 - 0.000609091 * alt:radar - 4.54545E-8 * alt:radar^2.
     //lock angle to 88.963 - 1.03287 * alt:radar^0.409511.
@@ -48,8 +56,7 @@ function doStart {
     unlock steering.
     unlock THROTTLE.
     SET SHIP:CONTROL:PILOTMAINTHROTTLE TO 0.
-    WAIT 2.
-    stage.
+    
 }
 
 
@@ -123,7 +130,6 @@ function calculateBurnTime {
 
 function executeNode {
     parameter nd.
-    add nd.
     print "Node in: " + round(nd:eta) + ", DeltaV: " + round(nd:deltav:mag).
 
     
@@ -152,7 +158,10 @@ function executeNode {
 
         //throttle is 100% until there is less than 1 second of time left to burn
         //when there is less than 1 second - decrease the throttle linearly
-        set thrott to min(nd:deltav:mag/max_acc, 1).
+        if max_acc > 0 {
+            set thrott to min(nd:deltav:mag/max_acc, 1).    
+        }
+        
 
         //here's the tricky part, we need to cut the throttle as soon as our nd:deltav and initial deltav start facing opposite directions
         //this check is done via checking the dot product of those 2 vectors
@@ -182,7 +191,7 @@ function executeNode {
 function doCircularize {
     set node to findNextBestNode(list(0), eccentricityScore@).
     local nd to node(time:seconds + eta:APOAPSIS, 0, 0, node[0]).
-    //  add nd.
+    add nd.
     executeNode(nd).
 }
 
@@ -190,6 +199,16 @@ function main {
     doStart(100000, KERBIN, 90).
    
     doCircularize().
+
+    rcs off.
+    until false {
+        print "wait for node".
+        wait until rcs.
+        print "next node ...".
+        rcs off.
+        set node to nextnode.
+        executeNode(node).
+    }
 }
 
 
