@@ -3,7 +3,7 @@ clearscreen.
 print "start".
 
 function doStart {
-    parameter wantedApoapsos, planet.
+    parameter wantedApoapsos, planet, targetDirection.
     SET g TO planet:MU / planet:RADIUS^2.
     LOCK accvec TO SHIP:SENSORS:ACC - SHIP:SENSORS:GRAV.
     LOCK gforce TO accvec:MAG / g.
@@ -13,13 +13,16 @@ function doStart {
     SET Kd TO 0.0005.
 
     SET PID TO PIDLOOP(Kp, Kp, Kd).
-    SET PID:SETPOINT TO 1.8.
+    SET PID:SETPOINT TO 1.7.
     SET thrott TO 1.
     LOCK THROTTLE TO thrott.
 
+    STAGE.
+    wait until STAGE:READY.
+    wait 0.5.
+    STAGE.
+
     WHEN MAXTHRUST = 0 THEN {
-        PRINT "Staging".
-        STAGE.
         IF STAGE:NUMBER > 0
             PRESERVE.
         
@@ -27,8 +30,13 @@ function doStart {
 
     //lock angle to 90.0909 - 0.000609091 * alt:radar - 4.54545E-8 * alt:radar^2.
     //lock angle to 88.963 - 1.03287 * alt:radar^0.409511.
-    lock angle to (17 * alt:radar^2)/1600000000 - (157 * alt:radar/80000) + 90.
-    lock steering to HEADING(90, angle).
+    // lock angle to (17 * alt:radar^2)/1600000000 - (157 * alt:radar/80000) + 90.
+    lock angle to 90 -  alt:radar * 0.003.
+    lock steering to HEADING(targetDirection, angle).
+    when angle < 45 then {
+        unlock steering.
+        lock steering to ship:prograde.
+    }
 
     UNTIL SHIP:APOAPSIS > wantedApoapsos {
         SET thrott TO thrott + PID:UPDATE(TIME:SECONDS, gforce).
@@ -122,26 +130,21 @@ function executeNode {
     
     local burn_duration to calculateBurnTime(nd).
     print "Crude Estimated burn duration: " + round(burn_duration) + "s".
-    wait until nd:eta <= (burn_duration/2 + 60).
-
+    
     set np to nd:deltav. 
     lock steering to nd:deltav.
 
     //now we need to wait until the burn vector and ship's facing are aligned
-    wait until vang(np, ship:facing:vector) < 0.25.
+    //wait until vang(np, ship:facing:vector) < 0.25.
 
-    local startTime to time:seconds + nd:eta - (burn_duration/2) - 2.7.
-    
     set thrott to 0.
     LOCK THROTTLE TO thrott.
     
-
-    
-    wait until time:seconds >= startTime.
+    wait until nd:eta <= (burn_duration/2).
     set thrott to 1.
     
     set done to False.
-    //initial deltav
+    
     set dv0 to nd:deltav.
     until done {
         //recalculate current max_acceleration, as it changes while we burn through fuel
@@ -184,7 +187,7 @@ function doCircularize {
 }
 
 function main {
-    doStart(100000, KERBIN).
+    doStart(100000, KERBIN, 90).
    
     doCircularize().
 }
